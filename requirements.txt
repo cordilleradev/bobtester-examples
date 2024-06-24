@@ -1,4 +1,3 @@
-bobtester @ git+https://github.com/cordilleradev/bobtester@9fc15068de0c8bc2d297af448d54f5c907fc07b5
 contourpy==1.2.1
 cycler==0.12.1
 fonttools==4.53.0
