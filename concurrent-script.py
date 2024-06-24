@@ -1,14 +1,23 @@
 import datetime
 import logging
-import concurrent.futures
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
-from pandas import DataFrame
 import pandas as pd
-from logic.backtest import BackTester
-from logic.condition import Condition
+from bobtester.backtest import BackTester
+from bobtester.condition import Condition
 
-# BackTester instance
-b = BackTester()
+# Setup basic logging configuration
+logging.basicConfig(filename='backtest_errors.log', level=logging.ERROR,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
+# BackTester instance with preloaded data
+b = BackTester(
+    fear_and_greed_path="./data/fear-and-greed-index.csv",
+    bitcoin_prices_path="./data/bitcoin-prices.csv",
+    ethereum_prices_path="./data/ethereum-prices.csv",
+    bitcoin_volatility_path="./data/bitcoin-volatility.csv",
+    ethereum_volatility_path="./data/ethereum-volatility.csv"
+)
 
 # Define the condition for the strategy
 condition_long_condor = Condition(
@@ -26,48 +35,66 @@ class CallbackManager:
         self.fear_and_greed = fear_and_greed
 
     def callback(self, df: pd.DataFrame) -> bool:
+        if df.empty:
+            return False
         volatility = df.iloc[-1]['volatility']
         fear = df.iloc[-1]['fear_and_greed']
         return volatility < self.vol and fear < self.fear_and_greed
 
-def backtest_and_return_stats(vol, fear_and_greed):
+def backtest_and_return_stats(vol, fear_and_greed, asset):
     manager = CallbackManager(vol, fear_and_greed)
     try:
         response = b.backtest(
             name="googus",
             strategy_conditions=condition_long_condor,
-            asset="btc",
+            asset=asset,
             start_position=manager.callback,
             start_from=datetime.date.fromisoformat("2020-01-01")
         )
         stats = response.return_outcome_stats()
         stats['volatility'] = vol
         stats['fear_and_greed'] = fear_and_greed
+        stats['asset'] = asset
         return stats
     except Exception as e:
-        logging.error(f"Error in backtest vol={vol}, fear_and_greed={fear_and_greed}: {str(e)}")
-        return {"error": str(e), "volatility": vol, "fear_and_greed": fear_and_greed}
+        logging.error(f"Error in backtest vol={vol}, fear_and_greed={fear_and_greed}, asset={asset}: {str(e)}", exc_info=True)
+        return {"error": str(e), "volatility": vol, "fear_and_greed": fear_and_greed, "asset": asset}
 
-# Create a list of (vol, fear_and_greed) tuples for the specified ranges
-combinations = [(vol, fg) for vol in range(30, 91) for fg in range(30, 101)]
+def run_backtest(asset, fg_bounds, vol_bounds, filename):
+    # Create a list of (vol, fear_and_greed, asset) tuples for the specified ranges
+    combinations = [(vol, fg, asset) for vol in range(vol_bounds[0], vol_bounds[1] + 1) for fg in range(fg_bounds[0], fg_bounds[1] + 1)]
 
-# Execute backtests across different volatility and fear_and_greed indices
-outcomes = []
-with concurrent.futures.ThreadPoolExecutor() as executor:
-    futures = [executor.submit(backtest_and_return_stats, vol, fg) for vol, fg in combinations]
-    for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
-        try:
-            result = future.result()
-            if "error" not in result:
-                outcomes.append(result)
-            else:
-                logging.error(f"Error in backtest vol={result['volatility']}, fear_and_greed={result['fear_and_greed']}: {result['error']}")
-        except Exception as e:
-            logging.error(f"Exception while retrieving result: {e}")
+    # Execute backtests across different volatility, fear_and_greed indices, and assets
+    outcomes = []
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(backtest_and_return_stats, vol, fg, asset) for vol, fg, asset in combinations]
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            try:
+                result = future.result()
+                if "error" not in result:
+                    outcomes.append(result)
+                else:
+                    logging.error(f"Failed backtest logged with details: vol={result['volatility']}, fear_and_greed={result['fear_and_greed']}, asset={result['asset']}: {result['error']}")
+            except Exception as e:
+                logging.error(f"Exception while retrieving result: {e}", exc_info=True)
 
-# Organize and rank outcomes
-df = pd.DataFrame(outcomes)
-df['rank'] = df['percent_profitable'].rank(ascending=False)
+    df = pd.DataFrame(outcomes)
 
-# Save the DataFrame to a CSV file
-df.to_csv('outcomes_ranked.csv', index=False)
+    # Save the DataFrame to a CSV file
+    df.to_csv(filename, index=False)
+
+if __name__ == "__main__":
+# Example usage
+    run_backtest(
+        asset="btc",
+        fg_bounds=(5, 95),
+        vol_bounds=(36, 191),
+        filename='btc_outcomes.csv'
+    )
+
+    run_backtest(
+        asset="eth",
+        fg_bounds=(5,95),
+        vol_bounds=(34,217),
+        filename="eth_outcomes.csv"
+    )
