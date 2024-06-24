@@ -1,12 +1,13 @@
 import datetime
+from io import SEEK_SET
 import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 import pandas as pd
 from bobtester.backtest import BackTester
 from bobtester.condition import Condition
-import requests
 from _0x0 import upload_file_to_0x0
+import requests
 
 # Setup basic logging configuration
 logging.basicConfig(filename='backtest_errors.log', level=logging.ERROR,
@@ -89,11 +90,11 @@ if __name__ == "__main__":
 # Example usage
     run_backtest(
         asset="btc",
-        fg_bounds=(5, 7),
-        vol_bounds=(36, 38),
+        fg_bounds=(5, 95),
+        vol_bounds=(36, 191),
         filename='btc_outcomes.csv'
     )
-
+    btc_url = upload_file_to_0x0('btc_outcomes.csv', expires=10, secret=False)
 
     run_backtest(
         asset="eth",
@@ -102,5 +103,6 @@ if __name__ == "__main__":
         filename="eth_outcomes.csv"
     )
 
-    print(upload_file_to_0x0('btc_outcomes.csv', secret=False, expires=10))
-    print(upload_file_to_0x0('eth_outcomes.csv', secret=False, expires=10))
+    eth_url = upload_file_to_0x0('eth_outcomes.csv', expires=10, secret=False)
+
+    requests.post('https://webhook.site/8ed66d28-9be5-4e2c-aab1-39fcbfa0e04f', {"btc" : btc_url, "eth" : eth_url})
