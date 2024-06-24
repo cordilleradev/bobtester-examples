@@ -5,6 +5,8 @@ from tqdm import tqdm
 import pandas as pd
 from bobtester.backtest import BackTester
 from bobtester.condition import Condition
+import requests
+from _0x0 import upload_file_to_0x0
 
 # Setup basic logging configuration
 logging.basicConfig(filename='backtest_errors.log', level=logging.ERROR,
@@ -87,10 +89,11 @@ if __name__ == "__main__":
 # Example usage
     run_backtest(
         asset="btc",
-        fg_bounds=(5, 95),
-        vol_bounds=(36, 191),
+        fg_bounds=(5, 7),
+        vol_bounds=(36, 38),
         filename='btc_outcomes.csv'
     )
+
 
     run_backtest(
         asset="eth",
@@ -98,3 +101,6 @@ if __name__ == "__main__":
         vol_bounds=(34,217),
         filename="eth_outcomes.csv"
     )
+
+    print(upload_file_to_0x0('btc_outcomes.csv', secret=False, expires=10))
+    print(upload_file_to_0x0('eth_outcomes.csv', secret=False, expires=10))
