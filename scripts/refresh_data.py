@@ -16,9 +16,8 @@ def refresh_ohlcv_data(crypto: str, filename: str):
         writer = csv.writer(file)
         writer.writerow(['date', 'open', 'high', 'low', 'close', 'vol.'])
         for index, row in data.iterrows():
-            print(index)
             writer.writerow([index.strftime('%Y-%m-%d %H:%M:%S'), row['Open'], row['High'], row['Low'], row['Close'], row['Volume']])
-
+    print(f"OHLCV data for {crypto.upper()} saved to {filename}")
 
 def fetch_impl_volatility_data(crypto : str, filename : str):
     if crypto not in ['btc', 'eth']:
@@ -50,6 +49,7 @@ def fetch_impl_volatility_data(crypto : str, filename : str):
                 date = datetime.fromtimestamp(entry[0] / 1000).strftime('%Y-%m-%d')
                 volatility = entry[1]
                 writer.writerow([date, volatility])
+        print(f"Volatility data for {crypto.upper()} saved to {filename}")
 
     except requests.exceptions.RequestException as e:
         print(f"HTTP request failed: {e}")
@@ -87,20 +87,15 @@ def fetch_fear_and_greed_data(filename: str):
         df = df.rename(columns={'value': 'fear_and_greed'})
         # Saving to CSV
         df.to_csv(filename, index=False, date_format='%Y-%m-%d')
+        print(f"Fear and Greed Index data saved to {filename}")
 
     except requests.exceptions.RequestException as e:
         print(f"HTTP request failed: {e}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
-
-
-
-
-
-
 refresh_ohlcv_data("btc", "./data/bitcoin-prices.csv")
 refresh_ohlcv_data("eth", "./data/ethereum-prices.csv")
 fetch_fear_and_greed_data("./data/fear-and-greed-index.csv")
 fetch_impl_volatility_data("btc", './data/bitcoin-volatility.csv')
-fetch_impl_volatility_data("eth", './data/ethereum-volatility.csv')
+fetch_impl_volatility_data("eth", "./data/ethereum-volatility.csv")
