@@ -44,6 +44,8 @@ def callback1(historical_data : pd.DataFrame) -> bool:
     if len(historical_data) < 14:
         return False
 
+    last_volatility = historical_data['volatility'].iloc[-1]
+    fear_and_greed_value = historical_data['fear_and_greed'].iloc[-1]
 
     return True
 
