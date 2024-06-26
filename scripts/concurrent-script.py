@@ -30,6 +30,9 @@ class CallbackManager:
         self.vol = vol
         self.fear_and_greed = fear_and_greed
 
+    def blank_callback(self, df : pd.DataFrame) -> bool:
+        return df.empty
+
     def callback(self, df: pd.DataFrame) -> bool:
         if df.empty:
             return False
