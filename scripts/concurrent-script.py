@@ -1,17 +1,10 @@
 import datetime
-from io import SEEK_SET
-import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 import pandas as pd
 from bobtester.backtest import BackTester
 from bobtester.condition import Condition
-from _0x0 import upload_file_to_0x0
 import requests
-
-# Setup basic logging configuration
-logging.basicConfig(filename='backtest_errors.log', level=logging.ERROR,
-                    format='%(asctime)s:%(levelname)s:%(message)s')
 
 # BackTester instance with preloaded data
 b = BackTester(
@@ -60,7 +53,6 @@ def backtest_and_return_stats(vol, fear_and_greed, asset):
         stats['asset'] = asset
         return stats
     except Exception as e:
-        logging.error(f"Error in backtest vol={vol}, fear_and_greed={fear_and_greed}, asset={asset}: {str(e)}", exc_info=True)
         return {"error": str(e), "volatility": vol, "fear_and_greed": fear_and_greed, "asset": asset}
 
 def run_backtest(asset, fg_bounds, vol_bounds, filename):
@@ -71,15 +63,13 @@ def run_backtest(asset, fg_bounds, vol_bounds, filename):
     outcomes = []
     with ProcessPoolExecutor() as executor:
         futures = [executor.submit(backtest_and_return_stats, vol, fg, asset) for vol, fg, asset in combinations]
-        for future in tqdm(as_completed(futures), total=len(futures)):
-            try:
+        # Inside your function or main script
+        with tqdm(total=len(futures), file=TqdmLoggingHandler(), dynamic_ncols=True) as pbar:
+            for future in as_completed(futures):
                 result = future.result()
                 if "error" not in result:
                     outcomes.append(result)
-                else:
-                    logging.error(f"Failed backtest logged with details: vol={result['volatility']}, fear_and_greed={result['fear_and_greed']}, asset={result['asset']}: {result['error']}")
-            except Exception as e:
-                logging.error(f"Exception while retrieving result: {e}", exc_info=True)
+                pbar.update(1)  # Update progress after each future completes
 
     df = pd.DataFrame(outcomes)
 
@@ -94,7 +84,6 @@ if __name__ == "__main__":
         vol_bounds=(36, 191),
         filename='btc_outcomes.csv'
     )
-    btc_url = upload_file_to_0x0('btc_outcomes.csv', expires=10, secret=False)
 
     run_backtest(
         asset="eth",
@@ -102,7 +91,3 @@ if __name__ == "__main__":
         vol_bounds=(34,217),
         filename="eth_outcomes.csv"
     )
-
-    eth_url = upload_file_to_0x0('eth_outcomes.csv', expires=10, secret=False)
-
-    requests.post('https://webhook.site/8ed66d28-9be5-4e2c-aab1-39fcbfa0e04f', {"btc" : btc_url, "eth" : eth_url})

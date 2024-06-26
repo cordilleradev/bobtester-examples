@@ -7,14 +7,6 @@ from bobtester.backtest import BackTester
 
 
 
-def callback(historical_data : pd.DataFrame) -> bool:
-    if historical_data.empty:
-        return False
-    last_row = historical_data.iloc[-1]
-    fear_and_greed = last_row['fear_and_greed']
-    volatility = last_row['volatility']
-    print(fear_and_greed, volatility)
-    return fear_and_greed < 51 and volatility < 67
 
 condition_long_condor = Condition(
     open_price=0,
@@ -47,6 +39,18 @@ backtester = BackTester(
     ethereum_volatility_path="./data/ethereum-volatility.csv"
 )
 
+def callback(historical_data : pd.DataFrame) -> bool:
+    if historical_data.empty:
+        return False
+
+    if len(historical_data) < 14:
+        return False
+
+    last_row = historical_data.iloc[-1]
+    iroc_vol = historical_data['volatility'].pct_change().iloc[-1]
+
+    return  30 < last_row['rsi'] < 70
+
 response = backtester.backtest(
     name="amrith",
     strategy_conditions=condition_long_condor,
@@ -56,5 +60,9 @@ response = backtester.backtest(
 )
 
 print(response.return_outcome_stats())
+response.export_outcome(merged_crypto_data_path="merged.csv")
 response.get_plot()
-plt.show()
+try:
+    plt.show()
+except KeyboardInterrupt:
+    pass
