@@ -56,7 +56,7 @@ def run_backtest(fear_index: int, vol_index: int):
         strategy_conditions=condition_long_condor,
         asset="eth",
         start_position=callback(fear_index, vol_index),
-        start_from=datetime.date.fromisoformat("2024-01-01")
+        start_from=datetime.date.fromisoformat("2020-01-01")
     )
 
 gc_key = os.getenv('SPREADSHEET_KEY')
