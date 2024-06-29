@@ -112,7 +112,7 @@ if __name__ == '__main__':
 
             completed_jobs += 1
             current_time = time.time()
-            if current_time - last_update_time > 10 or completed_jobs == total_jobs:
+            if current_time - last_update_time > 20 or completed_jobs == total_jobs:
                 if batch_append_rows(worksheet, batch_rows):
                     update_loading_bar(worksheet, completed_jobs, total_jobs)
                 batch_rows = []
