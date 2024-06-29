@@ -63,9 +63,10 @@ gc_key = os.getenv('SPREADSHEET_KEY')
 gc_service = os.getenv("SERVICE_JSON")
 worksheet_name = os.getenv("WORKSHEET_NAME")
 
-
 if not gc_key or not gc_service or not worksheet_name:
     raise ValueError("Missing environment variables for Google Sheets integration.")
+
+
 if __name__ == '__main__':
     gc = gspread.service_account_from_dict(info=json.loads(gc_service))
     sh = gc.open_by_key(gc_key)
@@ -86,8 +87,8 @@ if __name__ == '__main__':
     worksheet.update(values=[["Loading: 0/0 iterations completed"]], range_name='A1')
     worksheet.update(values=[["fear_and_greed", "volatility", "percent_profitable", "total_positions", "percent_liquidated", "percent_unprofitable"]], range_name='A2')
 
+    combinations = generate_combinations(fear_and_greed_range, eth_volatility)
     with ProcessPoolExecutor() as executor:
-        combinations = generate_combinations(fear_and_greed_range, eth_volatility)
         futures = {executor.submit(run_backtest, fear_index, vol_index): (fear_index, vol_index) for fear_index, vol_index in combinations}
         total_jobs = len(futures)
         completed_jobs = 0
@@ -99,8 +100,8 @@ if __name__ == '__main__':
             try:
                 result = future.result()
                 stats = result.return_outcome_stats()
-
-                if stats['total_positions'] > 100 and stats["percent_profitable"] > 90:
+                print(stats)
+                if stats['total_positions'] > 100:
                     row = [
                         fear_index,
                         vol_index,
@@ -116,7 +117,7 @@ if __name__ == '__main__':
 
             completed_jobs += 1
             current_time = time.time()
-            if current_time - last_update_time > 20 or completed_jobs == total_jobs:
+            if current_time - last_update_time > 10 or completed_jobs == total_jobs:
                 if batch_append_rows(worksheet, batch_rows):
                     update_loading_bar(worksheet, completed_jobs, total_jobs)
                 batch_rows = []

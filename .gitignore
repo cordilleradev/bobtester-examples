@@ -168,3 +168,4 @@ data/fear-and-greed-index.csv
 data/bitcoin-volatility.csv
 data/ethereum-volatility.csv
 service.json
+example.yaml
