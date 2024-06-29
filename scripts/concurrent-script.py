@@ -63,12 +63,13 @@ gc_key = os.getenv('SPREADSHEET_KEY')
 gc_service = os.getenv("SERVICE_JSON")
 worksheet_name = os.getenv("WORKSHEET_NAME")
 
+
 if not gc_key or not gc_service or not worksheet_name:
     raise ValueError("Missing environment variables for Google Sheets integration.")
 if __name__ == '__main__':
     gc = gspread.service_account_from_dict(info=json.loads(gc_service))
-    sh = gc.open_by_key("1zFRO7fYXZRRxGY9ySfFdc-HzfugWsxP0pOU8n9t_Osg")
-    worksheet = sh.worksheet("vol-fng")
+    sh = gc.open_by_key(gc_key)
+    worksheet = sh.worksheet(worksheet_name)
 
     def update_loading_bar(worksheet, completed_iterations, total_iterations):
         loading_message = f"Loading: {completed_iterations}/{total_iterations} iterations completed"
