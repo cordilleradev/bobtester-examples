@@ -1,13 +1,27 @@
 import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from tqdm import tqdm
+from typing import Callable
 import pandas as pd
+import gspread
+from itertools import product
+import time
+import os
 from bobtester.backtest import BackTester
 from bobtester.condition import Condition
-import requests
+import json
 
-# BackTester instance with preloaded data
-b = BackTester(
+# Define the trading condition using the Condition class
+condition_long_condor = Condition(
+    open_price=0,
+    period_days=14,
+    profit_below_price_factor=0.13,
+    profit_above_price_factor=0.13,
+    liquidate_below_price_factor=0.23,
+    liquidate_above_price_factor=0.23,
+)
+
+# Set up the BackTester with paths to relevant CSV files
+backtester = BackTester(
     fear_and_greed_path="./data/fear-and-greed-index.csv",
     bitcoin_prices_path="./data/bitcoin-prices.csv",
     ethereum_prices_path="./data/ethereum-prices.csv",
@@ -15,82 +29,91 @@ b = BackTester(
     ethereum_volatility_path="./data/ethereum-volatility.csv"
 )
 
-# Define the condition for the strategy
-condition_long_condor = Condition(
-    open_price=158.43,
-    period_days=14,
-    profit_below_price_factor=0.1,
-    profit_above_price_factor=0.1,
-    liquidate_below_price_factor=0.2,
-    liquidate_above_price_factor=0.2,
-)
+# Function to generate combinations of parameters
+def generate_combinations(*ranges: tuple[int, int]) -> list[tuple[int, ...]]:
+    return list(product(*[range(r[0], r[1]) for r in ranges]))
 
-class CallbackManager:
-    def __init__(self, vol: float, fear_and_greed: float) -> None:
-        self.vol = vol
-        self.fear_and_greed = fear_and_greed
+# Define parameter ranges
+fear_and_greed_range = (5, 95)
+eth_volatility = (36, 218)
 
-    def blank_callback(self, df : pd.DataFrame) -> bool:
-        return df.empty
-
-    def callback(self, df: pd.DataFrame) -> bool:
+# Callback function to provide as start condition for the backtest
+def callback(fng_val: int, vol_val: int) -> Callable[[pd.DataFrame], bool]:
+    def check_conditions(df: pd.DataFrame) -> bool:
         if df.empty:
             return False
-        volatility = df.iloc[-1]['volatility']
-        fear = df.iloc[-1]['fear_and_greed']
-        return volatility < self.vol and fear < self.fear_and_greed
 
-def backtest_and_return_stats(vol, fear_and_greed, asset):
-    manager = CallbackManager(vol, fear_and_greed)
-    try:
-        response = b.backtest(
-            name="googus",
-            strategy_conditions=condition_long_condor,
-            asset=asset,
-            start_position=manager.callback,
-            start_from=datetime.date.fromisoformat("2020-01-01")
+        return (
+            df['fear_and_greed'].iloc[-1] > fng_val and
+            df['volatility'].iloc[-1] < vol_val
         )
-        stats = response.return_outcome_stats()
-        stats['volatility'] = vol
-        stats['fear_and_greed'] = fear_and_greed
-        stats['asset'] = asset
-        return stats
-    except Exception as e:
-        return {"error": str(e), "volatility": vol, "fear_and_greed": fear_and_greed, "asset": asset}
+    return check_conditions
 
-def run_backtest(asset, fg_bounds, vol_bounds, filename):
-    # Create a list of (vol, fear_and_greed, asset) tuples for the specified ranges
-    combinations = [(vol, fg, asset) for vol in range(vol_bounds[0], vol_bounds[1] + 1) for fg in range(fg_bounds[0], fg_bounds[1] + 1)]
-
-    # Execute backtests across different volatility, fear_and_greed indices, and assets
-    outcomes = []
-    with ProcessPoolExecutor() as executor:
-        futures = [executor.submit(backtest_and_return_stats, vol, fg, asset) for vol, fg, asset in combinations]
-        # Inside your function or main script
-        with tqdm(total=len(futures), file=TqdmLoggingHandler(), dynamic_ncols=True) as pbar:
-            for future in as_completed(futures):
-                result = future.result()
-                if "error" not in result:
-                    outcomes.append(result)
-                pbar.update(1)  # Update progress after each future completes
-
-    df = pd.DataFrame(outcomes)
-
-    # Save the DataFrame to a CSV file
-    df.to_csv(filename, index=False)
-
-if __name__ == "__main__":
-# Example usage
-    run_backtest(
-        asset="btc",
-        fg_bounds=(5, 95),
-        vol_bounds=(36, 191),
-        filename='btc_outcomes.csv'
-    )
-
-    run_backtest(
+# Function to run a backtest with given parameters
+def run_backtest(fear_index: int, vol_index: int):
+    return backtester.backtest(
+        f"fng: {fear_index} - vol: {vol_index}",
+        strategy_conditions=condition_long_condor,
         asset="eth",
-        fg_bounds=(5,95),
-        vol_bounds=(34,217),
-        filename="eth_outcomes.csv"
+        start_position=callback(fear_index, vol_index),
+        start_from=datetime.date.fromisoformat("2024-01-01")
     )
+
+gc_key = os.getenv('SPREADSHEET_KEY')
+gc_service = os.getenv("SERVICE_JSON")
+worksheet_name = os.getenv("WORKSHEET_NAME")
+
+if not gc_key or not gc_service or not worksheet_name:
+    raise ValueError("Missing environment variables for Google Sheets integration.")
+if __name__ == '__main__':
+    gc = gspread.service_account_from_dict(info=json.loads(gc_service))
+    sh = gc.open_by_key("1zFRO7fYXZRRxGY9ySfFdc-HzfugWsxP0pOU8n9t_Osg")
+    worksheet = sh.worksheet("vol-fng")
+
+    def update_loading_bar(worksheet, completed_iterations, total_iterations):
+        loading_message = f"Loading: {completed_iterations}/{total_iterations} iterations completed"
+        worksheet.update(values=[[loading_message]], range_name='A1')
+
+    def batch_append_rows(worksheet, rows):
+        if rows:
+            worksheet.append_rows(rows)
+            return True
+        return False
+
+    worksheet.update(values=[["Loading: 0/0 iterations completed"]], range_name='A1')
+    worksheet.update(values=[["fear_and_greed", "volatility", "percent_profitable", "total_positions", "percent_liquidated", "percent_unprofitable"]], range_name='A2')
+
+    with ProcessPoolExecutor() as executor:
+        combinations = generate_combinations(fear_and_greed_range, eth_volatility)
+        futures = {executor.submit(run_backtest, fear_index, vol_index): (fear_index, vol_index) for fear_index, vol_index in combinations}
+        total_jobs = len(futures)
+        completed_jobs = 0
+        batch_rows = []
+        last_update_time = time.time()
+
+        for future in as_completed(futures):
+            fear_index, vol_index = futures[future]
+            result = future.result()
+            stats = result.return_outcome_stats()
+
+            if stats['total_positions'] > 100 and stats["percent_profitable"] > 0.8:
+                row = [
+                    fear_index,
+                    vol_index,
+                    stats["percent_profitable"],
+                    stats["total_positions"],
+                    stats["percent_liquidated"],
+                    stats["percent_unprofitable"]
+                ]
+                batch_rows.append(row)
+
+            completed_jobs += 1
+            current_time = time.time()
+            if current_time - last_update_time > 5 or completed_jobs == total_jobs:
+                if batch_append_rows(worksheet, batch_rows):
+                    update_loading_bar(worksheet, completed_jobs, total_jobs)
+                batch_rows = []
+                last_update_time = current_time
+
+        if batch_append_rows(worksheet, batch_rows):
+            update_loading_bar(worksheet, total_jobs, total_jobs)
