@@ -96,19 +96,23 @@ if __name__ == '__main__':
 
         for future in as_completed(futures):
             fear_index, vol_index = futures[future]
-            result = future.result()
-            stats = result.return_outcome_stats()
+            try:
+                result = future.result()
+                stats = result.return_outcome_stats()
 
-            if stats['total_positions'] > 100 and stats["percent_profitable"] > 90:
-                row = [
-                    fear_index,
-                    vol_index,
-                    stats["percent_profitable"],
-                    stats["total_positions"],
-                    stats["percent_liquidated"],
-                    stats["percent_unprofitable"]
-                ]
-                batch_rows.append(row)
+                if stats['total_positions'] > 100 and stats["percent_profitable"] > 90:
+                    row = [
+                        fear_index,
+                        vol_index,
+                        stats["percent_profitable"],
+                        stats["total_positions"],
+                        stats["percent_liquidated"],
+                        stats["percent_unprofitable"]
+                    ]
+                    batch_rows.append(row)
+
+            except Exception as e:
+                print(f"Error processing combination (fng: {fear_index}, vol: {vol_index}): {e}")
 
             completed_jobs += 1
             current_time = time.time()
