@@ -72,7 +72,9 @@ if __name__ == '__main__':
     worksheet = sh.worksheet(worksheet_name)
 
     def update_loading_bar(worksheet, completed_iterations, total_iterations):
-        loading_message = f"Loading: {completed_iterations}/{total_iterations} iterations completed"
+        percent_complete = (completed_iterations / total_iterations) * 100
+        loading_bar = "#" * int(percent_complete // 2) + "-" * (50 - int(percent_complete // 2))
+        loading_message = f"Loading: [{loading_bar}] {percent_complete:.2f}%"
         worksheet.update(values=[[loading_message]], range_name='A1')
 
     def batch_append_rows(worksheet, rows):
@@ -97,7 +99,7 @@ if __name__ == '__main__':
             result = future.result()
             stats = result.return_outcome_stats()
 
-            if stats['total_positions'] > 100 and stats["percent_profitable"] > 0.8:
+            if stats['total_positions'] > 100 and stats["percent_profitable"] > 90:
                 row = [
                     fear_index,
                     vol_index,
@@ -110,7 +112,7 @@ if __name__ == '__main__':
 
             completed_jobs += 1
             current_time = time.time()
-            if current_time - last_update_time > 5 or completed_jobs == total_jobs:
+            if current_time - last_update_time > 10 or completed_jobs == total_jobs:
                 if batch_append_rows(worksheet, batch_rows):
                     update_loading_bar(worksheet, completed_jobs, total_jobs)
                 batch_rows = []
